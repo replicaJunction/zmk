@@ -57,9 +57,10 @@ struct behavior_hold_tap_config {
     char *hold_behavior_dev;
     char *tap_behavior_dev;
     int quick_tap_ms;
-    bool global_quick_tap;
+    int global_quick_tap_ms;
     enum flavor flavor;
     bool retro_tap;
+    bool hold_trigger_on_release;
     int32_t hold_trigger_key_positions_len;
     int32_t hold_trigger_key_positions[];
 };
@@ -96,7 +97,9 @@ struct last_tapped {
     int64_t timestamp;
 };
 
-struct last_tapped last_tapped = {INT32_MIN, INT64_MIN};
+// Set time stamp to large negative number initially for test suites, but not
+// int64 min since it will overflow if -1 is added
+struct last_tapped last_tapped = {INT32_MIN, INT32_MIN};
 
 static void store_last_tapped(int64_t timestamp) {
     if (timestamp > last_tapped.timestamp) {
@@ -111,10 +114,11 @@ static void store_last_hold_tapped(struct active_hold_tap *hold_tap) {
 }
 
 static bool is_quick_tap(struct active_hold_tap *hold_tap) {
-    if (hold_tap->config->global_quick_tap || last_tapped.position == hold_tap->position) {
-        return (last_tapped.timestamp + hold_tap->config->quick_tap_ms) > hold_tap->timestamp;
+    if ((last_tapped.timestamp + hold_tap->config->global_quick_tap_ms) > hold_tap->timestamp) {
+        return true;
     } else {
-        return false;
+        return (last_tapped.position == hold_tap->position) &&
+               (last_tapped.timestamp + hold_tap->config->quick_tap_ms) > hold_tap->timestamp;
     }
 }
 
@@ -587,9 +591,10 @@ static int position_state_changed_listener(const zmk_event_t *eh) {
     }
 
     // Store the position of pressed key for positional hold-tap purposes.
-    if ((ev->state) // i.e. key pressed (not released)
+    if (((!undecided_hold_tap->config->hold_trigger_on_release && ev->state) // key pressed
+         || (undecided_hold_tap->config->hold_trigger_on_release && !ev->state)) // key released
         && (undecided_hold_tap->position_of_first_other_key_pressed ==
-            -1) // i.e. no other key has been pressed yet
+            -1) // no other key has been pressed yet
     ) {
         undecided_hold_tap->position_of_first_other_key_pressed = ev->position;
     }
@@ -700,9 +705,12 @@ static int behavior_hold_tap_init(const struct device *dev) {
         .hold_behavior_dev = DT_LABEL(DT_INST_PHANDLE_BY_IDX(n, bindings, 0)),                     \
         .tap_behavior_dev = DT_LABEL(DT_INST_PHANDLE_BY_IDX(n, bindings, 1)),                      \
         .quick_tap_ms = DT_INST_PROP(n, quick_tap_ms),                                             \
-        .global_quick_tap = DT_INST_PROP(n, global_quick_tap),                                     \
+        .global_quick_tap_ms = DT_INST_PROP(n, global_quick_tap)                                   \
+                                   ? DT_INST_PROP(n, quick_tap_ms)                                 \
+                                   : DT_INST_PROP(n, global_quick_tap_ms),                         \
         .flavor = DT_ENUM_IDX(DT_DRV_INST(n), flavor),                                             \
         .retro_tap = DT_INST_PROP(n, retro_tap),                                                   \
+        .hold_trigger_on_release = DT_INST_PROP(n, hold_trigger_on_release),                       \
         .hold_trigger_key_positions = DT_INST_PROP(n, hold_trigger_key_positions),                 \
         .hold_trigger_key_positions_len = DT_INST_PROP_LEN(n, hold_trigger_key_positions),         \
     };                                                                                             \
