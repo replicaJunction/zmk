@@ -78,7 +78,7 @@ menuconfig CUSTOM_WIDGET_PERIPHERAL_STATUS
 	bool "custom peripheral status widget"
 
 config CUSTOM_WIDGET_LAYER_STATUS_HIDE_HEADING
-	bool "Hide heading strip for layer widget"
+	bool "Hide heading strip for layer widget and center widgets on 1/3rds"
 	depends on CUSTOM_WIDGET_LAYER_STATUS
 
 choice CUSTOM_WIDGET_LOGO_IMAGE
